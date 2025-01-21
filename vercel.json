@@ -1,0 +1,14 @@
+{
+  "routes": [
+    {
+      "src": "/[^/]+",
+      "dest": "/",
+      "status": 200
+    },
+    {
+      "src": "/assets/(.*)",
+      "dest": "/assets/$1",
+      "status": 200
+    }
+  ]
+}

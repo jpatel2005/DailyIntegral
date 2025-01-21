@@ -1,0 +1,43 @@
+{
+  "name": "dailyintegralwebsite",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "lint": "eslint . --fix",
+    "format": "prettier --write src/"
+  },
+  "dependencies": {
+    "@auth0/auth0-vue": "^2.3.3",
+    "@popperjs/core": "^2.11.8",
+    "@vue/cli-plugin-eslint": "^5.0.8",
+    "dotenv": "^16.4.7",
+    "flowbite": "^2.5.2",
+    "katex": "^0.13.24",
+    "mathlive": "^0.103.0",
+    "primeicons": "^7.0.0",
+    "v-calendar": "^3.1.2",
+    "vatex": "^0.1.0",
+    "vue": "^3.5.13",
+    "vue-confetti-explosion": "^1.0.2",
+    "vue-final-modal": "^4.5.5",
+    "vue-router": "^4.5.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.14.0",
+    "@vitejs/plugin-vue": "^5.2.1",
+    "@vue/eslint-config-prettier": "^10.1.0",
+    "autoprefixer": "^10.4.20",
+    "eslint": "^9.14.0",
+    "eslint-plugin-vue": "^9.30.0",
+    "postcss": "^8.4.49",
+    "prettier": "^3.3.3",
+    "tailwindcss": "^3.4.17",
+    "vite": "^6.0.5",
+    "vite-plugin-vue-devtools": "^7.6.8",
+    "vue3-calendar-heatmap": "^2.0.5"
+  }
+}

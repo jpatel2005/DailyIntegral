@@ -1,0 +1,326 @@
+<template>
+  <LoadingCogs v-if="isLoading" />
+  <div v-else-if="problemLatex === null" class="w-full text-center">
+    <div class="m-auto">
+      <h3 class="text-white font-semibold text-5xl tracking-wide mt-8 lowercase">{{ dateStr }}</h3>
+      <h3 class="text-white font-medium text-4xl md:text-8xl tracking-wide mt-24 md:mt-64">No problem available!!!</h3>
+    </div>
+  </div>
+  <div v-else class="flex justify-center items-center w-full h-full overflow-x-hidden">
+    <div class="flex flex-col items-center w-full h-full">
+      <h3 class="text-white font-semibold text-3xl lg:text-5xl tracking-wide mt-4 lg:mt-8 lowercase">{{ dateStr }}</h3>
+      <div class="w-full inline-block md:mt-[-2em] lg:mt-[-3em]">
+        <div v-if="!isDaily" class="text-lg float-left w-32 text-center ml-4 px-4 py-3 w-fit">
+          <button class="text-white bg-blue-600 hover:bg-blue-700 px-3 py-2 rounded-md" @click="open">
+            Solution 💡
+          </button>
+        </div>
+        <div :class="problemState || problemState === 2 ? 'visible' : 'invisible'"
+          class="text-white text-lg bg-gray-600 border-2 border-gray-800 float-right w-32 text-center rounded-lg items-center justify-center flex flex-row gap-x-2 shadow-xl mr-10 px-4 py-3 w-fit">
+          <span>{{ problemState === 1 ? 'Solved' : problemState === 2 ? 'Solved (as daily problem)' : '\u200b' }}</span>
+          <span class="pi pi-check-circle text-green-500"></span>
+        </div>
+      </div>
+
+      <div class="w-full md:px-10 lg:px-20 md:mt-8 lg:mt-8 z-50 flex items-center justify-between">
+        <div class="hidden sm:inline">
+          <Stopwatch />
+        </div>
+        <div>
+          <div class="font-sans bg-gray-900 px-6 py-4 rounded-lg">
+            <h2 class="text-center text-2xl font-bold mb-4 text-white uppercase">
+              Important Notes:
+            </h2>
+            <div class="overflow-y-scroll max-w-96 md:max-w-[32em] max-h-28 md:max-h-32">
+              <ul class="list-disc text-white ml-6 lg:text-base mdtext-sm">
+                <li>For indefinite integrals, don't include the constant (+ c)</li>
+                <li>
+                  When multiplying variables (or expressions) together, use a
+                  multiplication symbol &nbsp;"&bull;" (e.g. xy &rarr; x&nbsp;&bull;&nbsp;y)
+                </li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div
+        class="equation-container lg:!mt-[-3em] !mb-8 px-12 select-none overflow-x-scroll scrollbar-thin scrollbar-thumb-gray-500 scrollbar-track-gray-700 w-full">
+        <vue-latex :expression="problemLatex" :fontsize="screenSize" class="text-white text-4xl md:text-6xl lg:text-8xl"
+          display-mode />
+      </div>
+      <div class="text-center">
+        <math-field id="math-input" ref="math-input"
+          class="items-center inline-block w-96 md:w-[32em] lg:w-[48em] lg:max-w-[90%] md:text-2xl lg:text-4xl py-1 md:py-1.5 px-1.5 md:px-2 pr-0"
+          defaultMode="math" :options="{ smartFence: true }" placeholder="1234"
+          @input='event => answer = event.target.value'></math-field>
+      </div>
+      <div class="mt-8 items-center flex flex-row gap-x-3">
+        <button
+          class="text-white float-left focus:outline-none font-medium text-lg rounded-lg text-xl px-4 py-2 text-center bg-blue-600 disabled:bg-gray-300 hover:bg-blue-700 border-transparent"
+          @click="checkAnswer" :disabled="checkAnswerActive">Check Answer</button>
+        <span class="pi pi-spin pi-cog text-3xl inline text-white" v-show="checkAnswerActive"></span>
+      </div>
+      <ConfettiExplosion v-if="visible" />
+      <div class="items-center flex flex-row gap-x-2 mt-3.5" :class="answerStatus ? 'text-green-400' : 'text-red-600'">
+        <p class="text-2xl font-serif tracking-wide" v-show="answerStatus !== null">{{ answerMessage }}</p>
+        <span class="pi text-lg mt-[-2px]" :class="answerStatus ? 'pi-check-circle' : 'pi-times-circle'"
+          v-show="answerStatus !== null"></span>
+      </div>
+    </div>
+  </div>
+  <ModalsContainer />
+</template>
+
+<style scoped>
+#math-input:focus-within {
+  outline: 4px solid #1E48A4;
+  border-radius: 4px;
+}
+
+.equation-container {
+  margin-top: .5em;
+}
+</style>
+
+<style>
+.katex-display {
+  margin-top: .5em;
+  margin-bottom: .25em;
+}
+</style>
+
+<script>
+import { onMounted, ref, nextTick, useTemplateRef } from 'vue';
+import { VueLatex } from 'vatex';
+import { useRoute } from 'vue-router';
+import { useAuth0 } from '@auth0/auth0-vue';
+import ConfettiExplosion from "vue-confetti-explosion";
+import 'primeicons/primeicons.css'
+import { convertDateToUTC, formatDateISO, formatDateString, sleep } from '../time';
+import router from '../router';
+import { ModalsContainer, useModal } from 'vue-final-modal';
+import SolutionModal from '../components/SolutionModal.vue';
+import LoadingCogs from '../components/LoadingCogs.vue';
+import Stopwatch from '../components/Stopwatch.vue';
+export default {
+  setup() {
+    const { getAccessTokenSilently } = useAuth0();
+    const isLoading = ref(true);
+    const dateStr = ref('');
+    const problemLatex = ref('');
+    const solutionLatex = ref('');
+    const stepsLatex = ref('');
+    const answer = ref('');
+    const visible = ref(false);
+    const isDaily = ref(false);
+    const userData = ref(null);
+    const problemState = ref(0);
+    const checkAnswerActive = ref(false);
+    const formattedDate = ref('');
+    const answerStatus = ref(null);
+    const answerMessage = ref('');
+    const mathInput = useTemplateRef('math-input');
+    // render confetti explosion
+    const explode = async function () {
+      visible.value = false;
+      await nextTick();
+      visible.value = true;
+    }
+    // Configure date related information (use router param if any)
+    const route = useRoute();
+    const curr = ref('');
+
+    // Perform the appropriate actions depending on whether or not the given answer was correct
+    const manageAnswerStatus = async function (status, message) {
+      // Answer status has been determined so set to false
+      checkAnswerActive.value = false;
+      answerStatus.value = status;
+      // Use message if one is provided, or else set based on status
+      answerMessage.value = message ?? (status ? 'Correct!' : 'Incorrect!');
+      if (status) {
+        // Confetti animation
+        await explode();
+        problemState.value = await problemSolveStatus(userData.value);
+        console.log(problemState.value);
+      }
+    }
+    // Retrieve the user's state for the current problem (unsolved = 0, solved not as daily problem = 1, solved as daily problem = 2)
+    const problemSolveStatus = async function (user) {
+      if (user?.username === undefined) {
+        return 0;
+      }
+      const date = formattedDate.value.trim();
+      try {
+        const response = await fetch(`${import.meta.env.VITE_API_URL}/problemStatus/${date}?username=${user?.username ?? ''}`, {
+          method: 'GET',
+        });
+        const data = await response.json();
+        return [0, 1, 2].includes(data) ? data : 0;
+      } catch {
+        return 0;
+      }
+    }
+    // Retrieve problem as latex given a date string (YYYY-MM-DD)
+    const getProblem = async function () {
+      const date = formattedDate.value;
+      try {
+        const response = await fetch(`${import.meta.env.VITE_API_URL}/problem/${date}`, {
+          method: 'GET',
+        });
+        const data = await response.json();
+        if (data.problem === undefined) {
+          return null;
+        }
+        return data.problem;
+      } catch {
+        return null;
+      }
+    }
+    // Retrieve solution and steps (steps may just be an empty string) given a date string (YYYY-MM-DD)
+    const getSolution = async function () {
+      const date = formattedDate.value;
+      try {
+        const token = await getAccessTokenSilently();
+        const response = await fetch(`${import.meta.env.VITE_API_URL}/solution/${date}`, {
+          method: 'GET',
+          headers: {
+            'Authorization': token,
+          }
+        });
+        const json = await response.json();
+        return [json.answer, json.steps || ''];
+      } catch {
+        // Return null array to preserve destructuring
+        return [null, null];
+      }
+    }
+    // Send request to the api to verify if the answer is correct (if so, then respond accordingly)
+    const checkAnswer = async function () {
+      checkAnswerActive.value = true;
+      answerStatus.value = null;
+      // sleep so that the user has to wait a bit longer
+      await sleep(2000);
+      // parse the input (replace cdot multiplication with asterik for proper parsing)
+      const input = answer.value.trim()
+        .replace(/\\cdot/g, '*');
+      if (input === '') {
+        manageAnswerStatus(false);
+        return false;
+      }
+      // First check if answer is invalid (e.g. contains integral)
+      if (input.includes('\\int')) {
+        manageAnswerStatus(false, 'Answer cannot contain an integral!');
+        return false;
+      }
+      // Check if answer contains comparison operators
+      if (input.includes('>') || input.includes('<') || input.includes('=')) {
+        manageAnswerStatus(false, 'Answer cannot contain comparison operators!');
+        return false;
+      }
+      // First verify that the user is signed in (no verification otherwise)
+      if (userData.value?.username === undefined) {
+        manageAnswerStatus(false, 'Please sign-in before submitting!');
+        return false;
+      }
+      const date = formattedDate.value;
+      // Check if the answer is correct using verify endpoint
+      try {
+        const urlEncoded = new URLSearchParams();
+        urlEncoded.append('answer', input);
+        urlEncoded.append('username', userData.value.username);
+        const token = await getAccessTokenSilently();
+        const response = await fetch(`${import.meta.env.VITE_API_URL}/verify/${date}`, {
+          method: 'POST',
+          headers: {
+            'Authorization': token,
+            'Content-Type': 'application/x-www-form-urlencoded',
+          },
+          body: urlEncoded.toString()
+        });
+        const data = await response.json();
+        const status = data === 'true';
+        manageAnswerStatus(status);
+        return status;
+      } catch {
+        manageAnswerStatus(false);
+        return false;
+      }
+    }
+    // Setup solution modal
+    const { open, close } = useModal({
+      component: SolutionModal,
+      attrs: {
+        problem: problemLatex,
+        solution: solutionLatex,
+        steps: stepsLatex,
+        onConfirm() {
+          close()
+        },
+      },
+    });
+    onMounted(async () => {
+      const { user } = useAuth0();
+      const date = new Date();
+      userData.value = user.value;
+      isLoading.value = true;
+      isDaily.value = false;
+      // Use router param for date, or else use current date (active daily problem)
+      curr.value = route.params['pdate'] !== '' ? convertDateToUTC(new Date(route.params['pdate'])) : date;
+      // If date is in the future, then route to home page (prevent trolling)
+      if (route.params['pdate'] && (!/^\d{4}-\d{2}-\d{2}$/.test(route.params['pdate']) || convertDateToUTC(new Date()).getTime() - curr.value.getTime() < 0)) {
+        await sleep(250);
+        router.push('/');
+        return;
+      }
+      formattedDate.value = formatDateISO(curr.value);
+      dateStr.value = formatDateString(curr.value);
+      // sleep so that the page will load
+      await sleep(250);
+      // Get problem and render the equation
+      // If problem latex is null, then render the page differently (say "no problem available")
+      problemLatex.value = await getProblem();
+      if (problemLatex.value === null) {
+        isLoading.value = false;
+        return;
+      }
+      // Get the user's existing status of solving the problem
+      problemState.value = await problemSolveStatus(userData.value);
+      // show 'solution' button only if problem is not the daily problem (check if routing indicates that this problem is a daily)
+      // either no route param (daily) or the route param is the daily's date
+      if (!route.params['pdate'] || formatDateISO(date) === formatDateISO(curr.value)) {
+        isDaily.value = true;
+      } else {
+        [solutionLatex.value, stepsLatex.value] = await getSolution();
+      }
+      isLoading.value = false;
+      // sleep for a bit so that the math input can mount
+      await sleep(1000);
+      // Remove undesired menu items from math-input (do this after loading to after errors -- nothing should change visually on render so this should be fine, plus the operation will be quick)
+      const itemsToRemove = new Set(['paste', 'ce-evaluate', 'ce-simplify', 'ce-solve', 'mode', 'variant', 'color', 'background-color', 'insert-matrix']);
+      mathInput.value.menuItems = mathInput.value.menuItems.filter(item => !itemsToRemove.has(item.id));
+    });
+    // Manage resizing of the latex expression
+    const screenSize = ref('default');
+    const updateScreenSize = function () {
+      const width = window.innerWidth;
+      if (width >= 1024) {
+        screenSize.value = 72;
+      } else if (width >= 768) {
+        screenSize.value = 40;
+      } else {
+        screenSize.value = 18;
+      }
+      screenSize.value *= (7 / 8);
+    };
+    onMounted(() => {
+      updateScreenSize();
+      window.addEventListener('resize', updateScreenSize);
+    });
+    return { dateStr, problemLatex, answer, answerMessage, answerStatus, checkAnswer, checkAnswerActive, visible, mathInput, problemState, isDaily, isLoading, open, screenSize };
+  },
+  components: {
+    VueLatex, ConfettiExplosion, ModalsContainer, LoadingCogs, Stopwatch
+  },
+}
+</script>

@@ -1,0 +1,56 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html {
+  font-size: 14px;
+}
+
+body {
+  margin: 0px;
+  min-height: 100%;
+  overflow-x: hidden;
+  overflow-y: auto;
+  background-color: var(--body-bg);
+  font-weight: normal;
+  color: var(--body-text-color);
+}
+
+html,
+body,
+#app {
+  height: 100%;
+  margin: 0;
+}
+
+/* remove button outline on focus */
+
+body button:focus,
+body button:active,
+body *[role='button']:focus-within {
+  outline: none;
+  box-shadow: none;
+}
+
+/* LOADING ANIMATIONS */
+
+.page-layout {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+
+  height: 100%;
+  width: 100%;
+}
+
+.page-layout__content {
+  flex: 1;
+  flex-basis: auto;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+
+  margin-top: 8rem;
+  max-width: 120rem;
+  width: 100%;
+}
