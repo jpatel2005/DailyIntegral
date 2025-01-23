@@ -36,8 +36,9 @@
                 <li>For indefinite integrals, don't include the constant (+ c)</li>
                 <li>
                   When multiplying variables (or expressions) together, use a
-                  multiplication symbol &nbsp;"&bull;" (e.g. xy &rarr; x&nbsp;&bull;&nbsp;y)
+                  multiplication symbol&nbsp;"&bull;"&nbsp;(e.g. xy &rarr; x&nbsp;&bull;&nbsp;y)
                 </li>
+                <li>Always use parentheses with trigonometric functions (e.g. cos(x) instead of cosx)</li>
               </ul>
             </div>
           </div>
