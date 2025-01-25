@@ -1,13 +1,28 @@
 {
   "routes": [
     {
-      "src": "/[^/]+",
-      "dest": "/",
+      "src": "^/profile/(.*)",
+      "dest": "/profile/$1",
       "status": 200
     },
     {
-      "src": "/assets/(.*)",
-      "dest": "/assets/$1",
+      "src": "^/problem/(.*)",
+      "dest": "/problem/$1",
+      "status": 200
+    },
+    {
+      "src": "^/leaderboard",
+      "dest": "/leaderboard",
+      "status": 200
+    },
+    {
+      "src": "^/callback",
+      "dest": "/callback",
+      "status": 200
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/",
       "status": 200
     }
   ]
