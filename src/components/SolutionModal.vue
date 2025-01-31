@@ -22,7 +22,10 @@
         <vue-latex :expression="props.steps" :fontsize="18" display-mode class="text-center text-gray-200" />
       </div>
     </div>
-    <div v-if="validAccount" class="flex justify-center items-center mx-6 sm:mx-12 mt-4">
+    <h3 v-if="!validAccount" class="text-center text-white font-serif font-light text-4xl mx-2 my-4">
+      Please sign-in before viewing solution!
+    </h3>
+    <div class="flex justify-center items-center mx-6 sm:mx-12 mt-4">
       <button class="text-white px-3 py-2 border rounded-lg w-28 sm:w-40 bg-gray-100/50 hover:bg-gray-100/25"
         @click="emit('confirm')">
         Close

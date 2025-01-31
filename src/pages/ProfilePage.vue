@@ -29,7 +29,7 @@
       <h3 class="text-white text-center font-semibold text-5xl md:text-7xl tracking-wide mt-[-.25em]">No user data
         found!</h3>
       <h4 class="text-white text-center text-3xl tracking-wide">{{ username === undefined ? `Please create an account
-        first!` : "Invalid user" }}</h4>
+        first!` : `Invalid user "${username}"` }}</h4>
       <!-- Search bar with button (no user version) -->
       <div class="flex">
         <div class="flex mx-auto items-center justify-between w-[80%] md:w-[30%]">
@@ -83,7 +83,8 @@
             tooltip-unit="solve" :range-color="['#1f1f22', '#1f1f22', '#d1d5db', '#4ade80']" :max=3 :values="user.data"
             :end-date="endDate" />
         </div>
-        <div class="text-white font-light font-serif flex flex-row gap-x-20 items-center justify-center mt-10">
+        <div
+          class="text-white font-light font-serif flex flex-row gap-x-20 items-center justify-center mt-10 max-sm:mb-4">
           <div class="flex flex-row gap-x-8 items-center">
             <span class="text-xl md:text-4xl lg:text-6xl">Solved as daily problem</span>
             <span class="inline-block w-4 h-4 bg-green-400 p-4 md:p-6 lg:p-8 rounded-lg"></span>
@@ -94,8 +95,7 @@
           </div>
         </div>
       </div>
-      <!-- absolute right-20 bottom-28 -->
-      <div class="hidden md:flex flex-row gap-x-4 ml-auto mr-8 items-baseline justify-center">
+      <div class="hidden md:flex flex-row gap-x-4 ml-auto mr-8 md:mt-4 items-baseline justify-center">
         <span class="text-center text-gray-400 text-md lg:text-2xl font-semibold">Account Creation Date:</span>
         <span class=" text-center text-gray-200 text-md lg:text-2xl font-mono">{{ user.creation_date }}</span>
       </div>

@@ -1,9 +1,14 @@
 <template>
   <nav class="border-gray-200 bg-gray-900 rounded-2xl mt-4 mx-3.5 mb-2">
-    <div class="flex flex-wrap items-center justify-between mx-16 p-4">
+    <div class="flex flex-wrap items-center justify-between lg:mx-16 p-2 py-4 lg:p-4 lg:my-0">
       <RouterLink to="/" class="flex items-center space-x-3 rtl:space-x-reverse">
-        <img src="../assets/logo.png" class="h-20" alt="DailyIntegral Logo" />
-        <span class="self-center text-3xl md:text-5xl font-semibold whitespace-nowrap text-white">DailyIntegral</span>
+        <img :class="{ hidden: logoLoading }" src="../assets/logo.png" @load="() => logoLoading = false" class="h-20"
+          alt="DailyIntegral Logo" />
+        <div :class="{ hidden: !logoLoading }" src="../assets/logo.png" class="img-skeleton !mx-0"
+          alt="DailyIntegral Logo">
+        </div>
+        <span
+          class="self-center text-3xl md:text-4xl lg:text-5xl font-semibold whitespace-nowrap text-white">DailyIntegral</span>
       </RouterLink>
       <div class="flex md:order-2 space-x-3 md:space-x-0 rtl:space-x-reverse">
         <div class="w-[180px] h-[48px] flex items-center justify-center">
@@ -50,13 +55,21 @@
   </nav>
 </template>
 
+<style scoped>
+.img-skeleton {
+  width: 5rem;
+  height: 5rem;
+}
+</style>
+
 <script>
-import { onMounted } from 'vue';
+import { onMounted, ref } from 'vue';
 import { initFlowbite } from 'flowbite';
 import { useAuth0 } from '@auth0/auth0-vue';
-
+const logoLoading = ref(true);
 export default {
   setup() {
+    logoLoading.value = true;
     const { loginWithRedirect, logout, isLoading, isAuthenticated } = useAuth0();
     const handleLogin = () =>
       loginWithRedirect({
@@ -77,7 +90,7 @@ export default {
     onMounted(() => {
       initFlowbite();
     })
-    return { handleLogin, handleLogout, isLoading, isAuthenticated }
+    return { handleLogin, handleLogout, isLoading, isAuthenticated, logoLoading }
   }
 }
 </script>

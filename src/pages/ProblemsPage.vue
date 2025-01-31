@@ -9,14 +9,14 @@
   <div v-else class="flex justify-center items-center w-full h-full overflow-x-hidden">
     <div class="flex flex-col items-center w-full h-full">
       <h3 class="text-white font-semibold text-3xl lg:text-5xl tracking-wide mt-4 lg:mt-8 lowercase">{{ dateStr }}</h3>
-      <div class="w-full inline-block md:mt-[-2em] lg:mt-[-3em]">
+      <div class="w-full flex md:inline-block md:mt-[-2em] lg:mt-[-3em]">
         <div v-if="!isDaily" class="text-lg float-left w-32 text-center ml-4 px-4 py-3 w-fit">
           <button class="text-white bg-blue-600 hover:bg-blue-700 px-3 py-2 rounded-md" @click="open">
             Solution 💡
           </button>
         </div>
         <div :class="problemState || problemState === 2 ? 'visible' : 'invisible'"
-          class="text-white text-lg bg-gray-600 border-2 border-gray-800 float-right w-32 text-center rounded-lg items-center justify-center flex flex-row gap-x-2 shadow-xl mr-10 px-4 py-3 w-fit">
+          class="text-white text-lg bg-gray-600 border-2 border-gray-800 float-right w-32 text-center rounded-lg items-center justify-center flex flex-row gap-x-2 shadow-xl mr-10 px-4 py-3 w-fit max-sm:m-auto">
           <span>{{ problemState === 1 ? 'Solved' : problemState === 2 ? 'Solved (as daily problem)' : '\u200b' }}</span>
           <span class="pi pi-check-circle text-green-500"></span>
         </div>
@@ -34,11 +34,15 @@
             <div class="overflow-y-scroll max-w-96 md:max-w-[32em] max-h-28 md:max-h-32">
               <ul class="list-disc text-white ml-6 lg:text-base mdtext-sm">
                 <li>For indefinite integrals, don't include the constant (+ c)</li>
+                <li>Logarithms are base e unless specified otherwise</li>
                 <li>
                   When multiplying variables (or expressions) together, use a
                   multiplication symbol&nbsp;"&bull;"&nbsp;(e.g. xy &rarr; x&nbsp;&bull;&nbsp;y)
                 </li>
-                <li>Always use parentheses with trigonometric functions (e.g. cos(x) instead of cosx)</li>
+                <li>Always use parentheses with trigonometric functions (e.g. cos(x) instead of cosx), logarithms, and
+                  etc</li>
+                <li>Use fractional exponents [e.g. x^(3/2)] instead of roots or nested powers [e.g. sqrt(x^3) or
+                  (x^3)^(1/2)]</li>
               </ul>
             </div>
           </div>
@@ -53,7 +57,7 @@
       <div class="text-center">
         <math-field id="math-input" ref="math-input"
           class="items-center inline-block w-96 md:w-[32em] lg:w-[48em] lg:max-w-[90%] md:text-2xl lg:text-4xl py-1 md:py-1.5 px-1.5 md:px-2 pr-0"
-          defaultMode="math" :options="{ smartFence: true }" placeholder="1234"
+          defaultMode="math" :smartFence="true" :smartSuperscript="false" :smartMode="false"
           @input='event => answer = event.target.value'></math-field>
       </div>
       <div class="mt-8 items-center flex flex-row gap-x-3">
@@ -69,6 +73,7 @@
           v-show="answerStatus !== null"></span>
       </div>
     </div>
+    <div ref="keyboardContainer" class="keyboard-footer"></div>
   </div>
   <ModalsContainer />
 </template>
@@ -81,6 +86,13 @@
 
 .equation-container {
   margin-top: .5em;
+}
+
+.keyboard-footer {
+  position: absolute;
+  left: 0;
+  width: 100%;
+  height: fit-content;
 }
 </style>
 
@@ -122,6 +134,8 @@ export default {
     const answerStatus = ref(null);
     const answerMessage = ref('');
     const mathInput = useTemplateRef('math-input');
+    const keyboardContainer = ref(null);
+    const keyboardHeight = ref(0);
     // render confetti explosion
     const explode = async function () {
       visible.value = false;
@@ -143,7 +157,6 @@ export default {
         // Confetti animation
         await explode();
         problemState.value = await problemSolveStatus(userData.value);
-        console.log(problemState.value);
       }
     }
     // Retrieve the user's state for the current problem (unsolved = 0, solved not as daily problem = 1, solved as daily problem = 2)
@@ -315,10 +328,31 @@ export default {
       screenSize.value *= (7 / 8);
     };
     onMounted(() => {
+      // manage dynamic sizing of the rendered latex
       updateScreenSize();
       window.addEventListener('resize', updateScreenSize);
     });
-    return { dateStr, problemLatex, answer, answerMessage, answerStatus, checkAnswer, checkAnswerActive, visible, mathInput, problemState, isDaily, isLoading, open, screenSize };
+    onMounted(async () => {
+      // Sleep while the page is loading (retrieving the problem + rendering page)
+      while (isLoading.value) {
+        await sleep(500);
+      }
+      // sleep for a bit extra then set the math keyboard container
+      await sleep(250);
+      if (keyboardContainer.value && window.mathVirtualKeyboard) {
+        window.mathVirtualKeyboard.container = keyboardContainer.value;
+        keyboardContainer.value.style.bottom = '0';
+        // create an event listener that will detect when the keyboard is opened (hopefully) and update a ref storing the keyboard height
+        window.mathVirtualKeyboard.addEventListener("geometrychange", () => {
+          const height = Number(window.mathVirtualKeyboard.boundingRect.height);
+          keyboardHeight.value = height;
+          keyboardContainer.value.style.height = height + 'px';
+          keyboardContainer.value.style.marginBottom = '-' + (window.innerWidth < 768 ? height : height / 6) + 'px';
+          document.documentElement.scrollTop = document.documentElement.scrollHeight;
+        });
+      }
+    });
+    return { dateStr, problemLatex, answer, answerMessage, answerStatus, checkAnswer, checkAnswerActive, visible, mathInput, problemState, isDaily, isLoading, open, screenSize, keyboardContainer };
   },
   components: {
     VueLatex, ConfettiExplosion, ModalsContainer, LoadingCogs, Stopwatch

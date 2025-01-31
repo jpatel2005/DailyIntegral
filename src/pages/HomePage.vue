@@ -6,21 +6,23 @@
         <p class="text-white font-light text-3xl text-left tracking-wide mt-4 ml-1">
           Improve your integration skills, day-by-day!
         </p>
-        <button type="button"
-          class="text-white float-left mt-10 focus:outline-none font-medium text-lg rounded-lg text-xl px-4 py-2 text-center bg-blue-600 hover:bg-blue-700"
-          @click="router.push('problem')">Go To Daily Problem</button>
-        <button type="button"
-          class="text-white float-left ml-4 mt-10 focus:outline-none font-medium text-lg rounded-lg text-xl px-4 py-2 text-center bg-transparent border border-blue-400 hover:bg-blue-500"
-          @click="open">See Past Problems</button>
+        <div class="flex flex-row gap-x-4 mt-10">
+          <button type="button"
+            class="text-white focus:outline-none font-medium text-lg rounded-lg text-xl px-4 py-2 text-center bg-blue-600 hover:bg-blue-700"
+            @click="router.push('problem')">Go To Daily Problem</button>
+          <button type="button"
+            class="text-white focus:outline-none font-medium text-lg rounded-lg text-xl px-4 py-2 text-center bg-transparent border border-blue-400 hover:bg-blue-500"
+            @click="open">See Past Problems</button>
+        </div>
       </div>
     </div>
     <div class="max-sm:hidden flex flex-col items-center w-1/2 md:w-2/5 mx-12 mt-12">
-      <img :class="{ hidden: gifLoading }" :src="gifSrc" @load="() => gifLoading = true" class="gif" alt="Math Gif">
+      <img :class="{ hidden: gifLoading }" :src="gifSrc" @load="() => gifLoading = false" class="gif" alt="Math Gif">
       <div :class="{ hidden: !gifLoading }" class="img-skeleton"></div>
     </div>
   </div>
   <p
-    class="text-white font-bold text-4xl md:text-8xl text-center font-display indent lowercase mt-10 lg:mt-[-.6em] mx-2">
+    class="text-white font-bold text-4xl md:text-7xl lg:text-8xl text-center font-display indent lowercase mt-10 lg:mt-[-.6em] mx-2">
     New
     Problems
     Daily
@@ -45,7 +47,7 @@ img.gif {
 </style>
 
 <script>
-import { getRefreshTime, sleep } from '../time';
+import { getRefreshTime } from '../time';
 import router from '../router';
 import { ref, onMounted } from 'vue';
 import { ModalsContainer, useModal } from 'vue-final-modal';
@@ -62,9 +64,7 @@ export default {
       // Use timestamp to force refresh on gif
       const timestamp = new Date().getTime();
       gifSrc.value = `https://i.imgur.com/wR1JWd5.gif?v=${timestamp}`;
-      // sleep for a bit -- allow the gif to render before showing it
-      await sleep(500);
-      gifLoading.value = false;
+      // isLoading will be set when the gif is loaded
     });
     // Setup past problems modal
     const { open, close } = useModal({
