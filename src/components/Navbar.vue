@@ -21,7 +21,7 @@
         </div>
         <button data-collapse-toggle="navbar-cta" type="button"
           class="inline-flex items-center p-2 w-10 h-10 justify-center text-sm rounded-lg md:hidden focus:outline-none text-gray-400 hover:bg-gray-700"
-          aria-controls="navbar-cta" aria-expanded="false">
+          aria-controls="navbar-cta" aria-expanded="false" ref="navbarMenu">
           <span class="sr-only">Open main menu</span>
           <svg class="w-5 h-5" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 17 14">
             <path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -34,19 +34,21 @@
           class="flex flex-col font-medium p-4 md:p-0 mt-4 border rounded-lg md:space-x-8 rtl:space-x-reverse md:flex-row md:mt-0 md:border-0 md:bg-gray-900 border-gray-700">
           <li>
             <RouterLink to="/" class="block py-2 px-3 md:p-0 text-white bg-blue-700 rounded md:bg-transparent text-xl"
-              active-class="md:text-blue-500" aria-current="page">Home</RouterLink>
+              active-class="md:text-blue-500" aria-current="page" @click="hideNavbarMenu">Home
+            </RouterLink>
           </li>
           <li>
             <RouterLink to="/profile"
               class="block py-2 px-3 md:p-0 rounded md:hover:text-blue-500 text-white hover:bg-gray-700 hover:text-white md:hover:bg-transparent border-gray-700 text-xl"
-              active-class="md:text-blue-500" :class="{ 'md:text-blue-500': $route.path.startsWith('/profile') }">
+              active-class="md:text-blue-500" :class="{ 'md:text-blue-500': $route.path.startsWith('/profile') }"
+              @click="hideNavbarMenu">
               Profile
             </RouterLink>
           </li>
           <li>
             <RouterLink to="/leaderboard"
               class="block py-2 px-3 md:p-0 rounded md:hover:text-blue-500 text-white hover:bg-gray-700 hover:text-white md:hover:bg-transparent border-gray-700 text-xl"
-              active-class="md:text-blue-500">
+              active-class="md:text-blue-500" @click="hideNavbarMenu">
               Leaderboard</RouterLink>
           </li>
         </ul>
@@ -67,6 +69,7 @@ import { onMounted, ref } from 'vue';
 import { initFlowbite } from 'flowbite';
 import { useAuth0 } from '@auth0/auth0-vue';
 const logoLoading = ref(true);
+const navbarMenu = ref(true);
 export default {
   setup() {
     logoLoading.value = true;
@@ -87,10 +90,17 @@ export default {
           returnTo: window.location.origin
         }
       });
+    // Function for hiding navbar menu after option is selected
+    const hideNavbarMenu = function () {
+      if (!navbarMenu.value) {
+        return;
+      }
+      navbarMenu.value.click();
+    }
     onMounted(() => {
       initFlowbite();
     })
-    return { handleLogin, handleLogout, isLoading, isAuthenticated, logoLoading }
+    return { handleLogin, handleLogout, isLoading, isAuthenticated, logoLoading, navbarMenu, hideNavbarMenu }
   }
 }
 </script>
