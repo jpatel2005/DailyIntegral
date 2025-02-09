@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/signal"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -19,6 +20,7 @@ import (
 	"github.com/labstack/echo"
 	"github.com/labstack/echo/middleware"
 	_ "github.com/lib/pq"
+	"golang.org/x/time/rate"
 
 	"github.com/auth0/go-jwt-middleware/v2/jwks"
 	"github.com/auth0/go-jwt-middleware/v2/validator"
@@ -33,6 +35,9 @@ var (
 	db             *sql.DB
 	DATE_LAYOUT    = "2006-01-02"
 	DAY_SECONDS    = 86400.0
+	// Create a rate limiter per client
+	clients = make(map[string]*rate.Limiter)
+	mu      sync.Mutex
 )
 
 // CustomClaims contains custom data we want from the token.
@@ -60,13 +65,41 @@ func validateDate(dateStr string) (time.Time, string) {
 	return date, ""
 }
 
+type UserInfo struct {
+	Username string `json:"username"`
+}
+
+func fetchUserInfo(token string) (*UserInfo, error) {
+	userInfoURL := fmt.Sprintf("https://%s/userinfo", AUTH0_DOMAIN)
+	req, err := http.NewRequest("GET", userInfoURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("failed to fetch user info (invalid token provided): %s", resp.Status)
+	}
+	var userInfo UserInfo
+	if err := json.NewDecoder(resp.Body).Decode(&userInfo); err != nil {
+		return nil, err
+	}
+	return &userInfo, nil
+}
+
 /*
 This function should ensure that the following things are completed:
 - Perform standard JWT validation
 - Verify token audience claims (via validator configuration)
 - Verify token scope configuration (via CustomClaims Validate function)
+- Validate that the provided username is associated with the given access token
 */
-func validateToken(token string) bool {
+func validateToken(token string, checkUsername bool, username string) bool {
 	issuerURL, err := url.Parse("https://" + AUTH0_DOMAIN + "/")
 	if err != nil {
 		log.Printf("Failed to parse the issuer url: %v", err)
@@ -98,7 +131,60 @@ func validateToken(token string) bool {
 		log.Printf("Invalid token: %v", err)
 		return false
 	}
+	// Exit early if username validation not being performed
+	if !checkUsername {
+		return true
+	}
+	// Fetch user info from Auth0
+	userInfo, err := fetchUserInfo(token)
+	if err != nil {
+		log.Printf("Failed to fetch user info when validating token: %v", err)
+		return false
+	}
+	if userInfo.Username != username {
+		return false
+	}
 	return true
+}
+
+func getLimiter(ip string, cooldownTime int, burstCount int) *rate.Limiter {
+	mu.Lock()
+	defer mu.Unlock()
+
+	limiter, exists := clients[ip]
+	if !exists {
+		// Allow 1 request every "cooldownTime" seconds (with a burstCount as well)
+		limiter = rate.NewLimiter(rate.Every(time.Duration(cooldownTime)*time.Second), burstCount)
+		clients[ip] = limiter
+	}
+
+	return limiter
+}
+
+func verifierRateLimiter(next echo.HandlerFunc) echo.HandlerFunc {
+	return func(c echo.Context) error {
+		ip := c.RealIP()
+		limiter := getLimiter(ip, 15, 1)
+
+		if !limiter.Allow() {
+			return c.JSON(http.StatusTooManyRequests, map[string]string{"error": "Too many requests"})
+		}
+
+		return next(c)
+	}
+}
+
+func generalRateLimiter(next echo.HandlerFunc) echo.HandlerFunc {
+	return func(c echo.Context) error {
+		ip := c.RealIP()
+		limiter := getLimiter(ip, 1, 25)
+
+		if !limiter.Allow() {
+			return c.JSON(http.StatusTooManyRequests, map[string]string{"error": "Too many requests"})
+		}
+
+		return next(c)
+	}
 }
 
 func retrieveProblem(c echo.Context) error {
@@ -145,7 +231,7 @@ func retrieveProblem(c echo.Context) error {
 func retrieveSolutionAndSteps(c echo.Context) error {
 	// require access token
 	token := c.Request().Header.Get("Authorization")
-	if !validateToken(token) {
+	if !validateToken(token, false, "") {
 		return c.JSON(http.StatusUnauthorized, "Invalid token provided")
 	}
 	dateStr := c.Param("date")
@@ -191,8 +277,24 @@ func retrieveSolutionAndSteps(c echo.Context) error {
 
 func verifySolution(c echo.Context) error {
 	// require access token
+	username := c.FormValue("username")
+	if len(username) == 0 {
+		return c.JSON(http.StatusBadRequest, "no username provided for solution verify")
+	}
+	rows, err := db.Query(`
+		SELECT 1
+		FROM users
+		WHERE username = $1
+	`, username)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, fmt.Sprintf("failed to validate username for %s: %v", username, err))
+	}
+	defer rows.Close()
+	if !rows.Next() {
+		return c.JSON(http.StatusUnauthorized, "Invalid username provided")
+	}
 	token := c.Request().Header.Get("Authorization")
-	if !validateToken(token) {
+	if !validateToken(token, true, username) {
 		return c.JSON(http.StatusUnauthorized, "Invalid token provided")
 	}
 	dateStr := c.Param("date")
@@ -205,16 +307,12 @@ func verifySolution(c echo.Context) error {
 	if inputTime.After(submitTime) {
 		return c.JSON(http.StatusBadRequest, fmt.Sprintf("cannot verify solution from the future: %s", dateStr))
 	}
-	username := c.FormValue("username")
-	if len(username) == 0 {
-		return c.JSON(http.StatusBadRequest, "no username provided for solution verify")
-	}
 	answer := c.FormValue("answer")
 	// First check to see that the answer doesn't contain integral or isn't empty or doesn't contain comparison operators (avoid cheating or wasteful processing)
 	if len(answer) == 0 || strings.Contains(answer, "\\int") || strings.Contains(answer, ">") || strings.Contains(answer, "<") {
 		return c.JSON(http.StatusInternalServerError, fmt.Sprintf("Invalid answer provided. Cannot provide empty string or \\int: %s or use comparison operators", answer))
 	}
-	rows, err := db.Query(`
+	rows, err = db.Query(`
 		SELECT answer
 		FROM problems
 		WHERE date_used = $1
@@ -507,7 +605,7 @@ func main() {
 	e.GET("/leaderboard", getLeaderboard)
 	e.GET("/problem/:date", retrieveProblem)
 	e.GET("/solution/:date", retrieveSolutionAndSteps)
-	e.POST("/verify/:date", verifySolution)
+	e.POST("/verify/:date", verifySolution, verifierRateLimiter)
 	e.POST("/register/:username", createUser)
 	// Handle shutdown (gracefully)
 	go func() {

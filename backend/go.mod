@@ -7,6 +7,7 @@ require (
 	github.com/joho/godotenv v1.5.1
 	github.com/labstack/echo v3.3.10+incompatible
 	github.com/lib/pq v1.10.9
+	golang.org/x/time v0.10.0
 )
 
 require (
