@@ -40,6 +40,9 @@ export default {
         const response = await fetch(`${import.meta.env.VITE_API_URL}/leaderboard`, {
           method: 'GET'
         });
+        if (!response.ok) {
+          return null;
+        }
         const json = await response.json();
         //  return this is there was an error
         if (json.error !== undefined) {

@@ -167,6 +167,9 @@ export default {
         const response = await fetch(`${import.meta.env.VITE_API_URL}/problemStatus/${date}?username=${user?.username ?? ''}`, {
           method: 'GET',
         });
+        if (!response.ok) {
+          return 0;
+        }
         const data = await response.json();
         return [0, 1, 2].includes(data) ? data : 0;
       } catch {
@@ -180,6 +183,9 @@ export default {
         const response = await fetch(`${import.meta.env.VITE_API_URL}/problem/${date}`, {
           method: 'GET',
         });
+        if (!response.ok) {
+          return null;
+        }
         const data = await response.json();
         if (data.problem === undefined) {
           return null;
@@ -200,6 +206,9 @@ export default {
             'Authorization': token,
           }
         });
+        if (!response.ok) {
+          return [null, null];
+        }
         const json = await response.json();
         return [json.answer, json.steps || ''];
       } catch {
@@ -250,6 +259,16 @@ export default {
           },
           body: urlEncoded.toString()
         });
+        // Check if request is being rate limited
+        console.log(response.status);
+        if (response.status === 429) {
+          manageAnswerStatus(false, 'Please wait a moment before submitting!')
+          return false;
+        }
+        if (!response.ok) {
+          manageAnswerStatus(false);
+          return false;
+        }
         const data = await response.json();
         const status = data === 'true';
         manageAnswerStatus(status);
@@ -351,7 +370,6 @@ export default {
           }
           const height = Number(window.mathVirtualKeyboard.boundingRect.height);
           // configure the keyboard container (should work decently for mobile)
-          console.log(window.innerWidth / window.innerHeight);
           keyboardContainer.value.style.height = height + 'px';
           keyboardContainer.value.style.marginBottom = '-' + (window.innerWidth >= 1440 ? .5 * height : (isMobile() && window.innerWidth >= window.innerHeight ? Math.max(2.5, window.innerWidth / window.innerHeight) * height : (isMobile() ? height * Math.max(1.5, Math.min(1.5, window.innerHeight / window.innerWidth)) : height))) + 'px';
           document.documentElement.scrollTop = document.documentElement.scrollHeight;

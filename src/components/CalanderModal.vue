@@ -59,7 +59,7 @@ const getUser = async function (username) {
     const response = await fetch(`${import.meta.env.VITE_API_URL}/user/${username}`, {
       method: 'GET'
     });
-    // Return null is there was an error (user doesn't exist)
+    // Return null is there was an error (user doesn't exist OR if too many requests were sent)
     if (!response.ok) {
       return null;
     }
@@ -75,12 +75,12 @@ const getStartDate = async function () {
       method: 'GET'
     });
     if (!response.ok) {
-      return '2025-01-01';
+      return '2025-02-01';
     }
     const data = await response.json();
     return data;
   } catch {
-    return '2025-01-01';
+    return '2025-02-01';
   }
 }
 const currDate = ref(null);
