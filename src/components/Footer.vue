@@ -8,7 +8,7 @@
           <a href="https://jaipatel.netlify.app/" target="_blank" class="hover:underline me-4 md:me-6">About Me</a>
         </li>
         <li>
-          <a href="https://github.com/NerdyGamer05/DailyIntegral" target="_blank" class="hover:underline">GitHub</a>
+          <a href="https://github.com/jpatel2005/DailyIntegral" target="_blank" class="hover:underline">GitHub</a>
         </li>
       </ul>
     </div>
