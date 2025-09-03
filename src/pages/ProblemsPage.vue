@@ -117,7 +117,7 @@ import LoadingCogs from '../components/LoadingCogs.vue';
 import Stopwatch from '../components/Stopwatch.vue';
 export default {
   setup() {
-    const { getAccessTokenSilently } = useAuth0();
+    const { getAccessTokenSilently, isAuthenticated } = useAuth0();
     const isLoading = ref(true);
     const dateStr = ref('');
     const problemLatex = ref('');
@@ -240,7 +240,7 @@ export default {
         return false;
       }
       // First verify that the user is signed in (no verification otherwise)
-      if (userData.value?.username === undefined) {
+      if (!isAuthenticated.value || userData.value?.username === undefined) {
         manageAnswerStatus(false, 'Please sign-in before submitting!');
         return false;
       }
