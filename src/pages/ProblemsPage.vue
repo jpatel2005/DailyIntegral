@@ -220,8 +220,6 @@ export default {
     const checkAnswer = async function () {
       checkAnswerActive.value = true;
       answerStatus.value = null;
-      // sleep so that the user has to wait a bit longer
-      await sleep(2000);
       // parse the input (replace cdot multiplication with asterik for proper parsing)
       const input = answer.value.trim()
         .replace(/\\cdot/g, '*');

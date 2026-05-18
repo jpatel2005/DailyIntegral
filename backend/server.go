@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"database/sql"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -44,6 +45,21 @@ var (
 type CustomClaims struct {
 	Audience []string `json:"aud"`
 	Scope    string   `json:"scope"`
+}
+
+// LeaderboardCursor is for the leaderboard cursor pagination
+type LeaderboardCursor struct {
+	DailyProblems int    `json:"daily_problems"`
+	TotalProblems int    `json:"total_problems"`
+	Username      string `json:"username"`
+}
+
+// LeaderboardEntry contains data for a single leaderboard user
+type LeaderboardEntry struct {
+	Username      string `json:"username"`
+	DailyProblems int    `json:"daily_problems"`
+	TotalProblems int    `json:"total_problems"`
+	CreationDate  string `json:"creation_date"`
 }
 
 // Validate does nothing for this example, but we need it to satisfy validator.CustomClaims interface.
@@ -281,17 +297,16 @@ func verifySolution(c echo.Context) error {
 	if len(username) == 0 {
 		return c.JSON(http.StatusBadRequest, "no username provided for solution verify")
 	}
-	rows, err := db.Query(`
+	row := db.QueryRow(`
 		SELECT 1
 		FROM users
 		WHERE username = $1
 	`, username)
-	if err != nil {
+	if err := row.Scan(new(int)); err != nil {
+		if err == sql.ErrNoRows {
+			return c.JSON(http.StatusUnauthorized, "Invalid username provided")
+		}
 		return c.JSON(http.StatusInternalServerError, fmt.Sprintf("failed to validate username for %s: %v", username, err))
-	}
-	defer rows.Close()
-	if !rows.Next() {
-		return c.JSON(http.StatusUnauthorized, "Invalid username provided")
 	}
 	token := c.Request().Header.Get("Authorization")
 	if !validateToken(token, true, username) {
@@ -312,7 +327,7 @@ func verifySolution(c echo.Context) error {
 	if len(answer) == 0 || strings.Contains(answer, "\\int") || strings.Contains(answer, ">") || strings.Contains(answer, "<") {
 		return c.JSON(http.StatusInternalServerError, fmt.Sprintf("Invalid answer provided. Cannot provide empty string or \\int: %s or use comparison operators", answer))
 	}
-	rows, err = db.Query(`
+	rows, err := db.Query(`
 		SELECT answer
 		FROM problems
 		WHERE date_used = $1
@@ -393,85 +408,142 @@ func verifySolution(c echo.Context) error {
 
 // Get user's solve status on a problem
 func getProblemStatus(dateStr string, username string) int {
-	rows, err := db.Query(`
+	row := db.QueryRow(`
 		SELECT solves->$1
 		FROM users
 		WHERE username = $2
 	`, dateStr, username)
-	if err != nil {
-		return 0
-	}
-	defer rows.Close()
-	// Check if at least one row is returned (if not then the user has no attempted the problem)
-	if !rows.Next() {
-		return 0
-	}
 	// create struct to hold the problem data
 	var problemStatus int
 	// Retrieve data from the first row
-	if err := rows.Scan(&problemStatus); err != nil {
+	if err := row.Scan(&problemStatus); err != nil {
+		// Check if at least one row is returned (if not then the user has no attempted the problem)
+		if err == sql.ErrNoRows {
+			return 0
+		}
 		return 0
 	}
 	return problemStatus
 }
 
 func getUser(c echo.Context) error {
-	username := c.Param("username")
-	if len(username) == 0 {
+	inputUsername := c.Param("username")
+	if len(inputUsername) == 0 {
 		return c.JSON(http.StatusBadRequest, "no username provided for get user")
 	}
-	rows, err := db.Query(`
+	row := db.QueryRow(`
 		SELECT username, daily_problems, total_problems, creation_date, solves
 		FROM users
 		WHERE username = $1
-	`, username)
-	if err != nil {
-		return c.JSON(http.StatusInternalServerError, fmt.Sprintf("failed to retrieve user %s: %v", username, err))
-	}
-	defer rows.Close()
-	// Check if at least one row is returned
-	if !rows.Next() {
-		return c.JSON(http.StatusNoContent, fmt.Sprintf("no data found for user %s", username))
-	}
+	`, inputUsername)
 	// Retrieve data from the first row
+	var dbUsername string
 	var dailyProblems int
 	var totalProblems int
 	var creationDate string
 	var solvesData []byte
-	if err := rows.Scan(&username, &dailyProblems, &totalProblems, &creationDate, &solvesData); err != nil {
-		return c.JSON(http.StatusInternalServerError, fmt.Sprintf("failed to scan data from database for user %s: %v", username, err))
+	if err := row.Scan(&dbUsername, &dailyProblems, &totalProblems, &creationDate, &solvesData); err != nil {
+		// Check if at least one row is returned
+		if err == sql.ErrNoRows {
+			return c.JSON(http.StatusNoContent, fmt.Sprintf("no data found for user %s", inputUsername))
+		}
+		return c.JSON(http.StatusInternalServerError, fmt.Sprintf("failed to scan data from database for user %s: %v", inputUsername, err))
 	}
 	// Decode solves field into a map
 	var solves map[string]interface{}
 	if err := json.Unmarshal(solvesData, &solves); err != nil {
-		return c.JSON(http.StatusInternalServerError, fmt.Sprintf("failed to parse solves JSON for user %s: %v", username, err))
+		return c.JSON(http.StatusInternalServerError, fmt.Sprintf("failed to parse solves JSON for user %s: %v", inputUsername, err))
 	}
-	// Check if there is more than one row (this shouldn't happen)
-	if rows.Next() {
-		return c.JSON(http.StatusInternalServerError, fmt.Sprintf("expected one result row, got more than one for user %s", username))
+	// get the rank of the user (same as position in leaderboard)
+	var rank int
+	row = db.QueryRow(`
+		SELECT COUNT(*) + 1
+		FROM users
+		WHERE 
+			(daily_problems > $1) OR
+			(daily_problems = $1 AND total_problems > $2) OR
+			(daily_problems = $1 AND total_problems = $2 AND username < $3)
+	`, dailyProblems, totalProblems, inputUsername)
+	if err := row.Scan(&rank); err != nil {
+		return c.JSON(http.StatusInternalServerError, fmt.Sprintf("failed to retrieve rank for user %s: %v", inputUsername, err))
 	}
 	return c.JSON(http.StatusOK, map[string]interface{}{
-		"username":       username,
+		"username":       dbUsername,
 		"daily_problems": dailyProblems,
 		"total_problems": totalProblems,
 		"creation_date":  creationDate,
 		"solves":         solves,
+		"rank":           rank,
 	})
 }
 
+func decodeCursor(s string, out *LeaderboardCursor) error {
+	b, err := base64.StdEncoding.DecodeString(s)
+	if err != nil {
+		return err
+	}
+	return json.Unmarshal(b, out)
+}
+
+func encodeCursor(c LeaderboardCursor) (string, error) {
+	b, err := json.Marshal(c)
+	if err != nil {
+		return "", err
+	}
+	return base64.StdEncoding.EncodeToString(b), nil
+}
+
 func getLeaderboard(c echo.Context) error {
-	rows, err := db.Query(`
+	cursorStr := c.QueryParam("cursor")
+	baseQuery := `
 		SELECT username, daily_problems, total_problems, creation_date 
 		FROM users
-		ORDER BY daily_problems DESC, total_problems DESC
-		LIMIT 10
-	`)
+	`
+	// keep track of args for the query
+	args := []interface{}{}
+	// note starting rank for the current page
+	startingRank := 1
+	// if cursor exists, add WHERE clause
+	if cursorStr != "" && cursorStr != "start" {
+		var cursor LeaderboardCursor
+		if err := decodeCursor(cursorStr, &cursor); err != nil {
+			return c.JSON(http.StatusBadRequest, fmt.Sprintf("invalid cursor: %v", err))
+		}
+		baseQuery += `
+			WHERE 
+				(daily_problems < $1) OR
+				(daily_problems = $1 AND total_problems < $2) OR
+				(daily_problems = $1 AND total_problems = $2 AND username > $3)
+		`
+		args = append(args, cursor.DailyProblems, cursor.TotalProblems, cursor.Username)
+		// get the starting rank for the page
+		// +2 = +1 for cursor user and +1 for 1-based ranking
+		row := db.QueryRow(`
+			SELECT COUNT(*) + 2
+			FROM users
+			WHERE 
+				(daily_problems > $1) OR
+				(daily_problems = $1 AND total_problems > $2) OR
+				(daily_problems = $1 AND total_problems = $2 AND username < $3)
+		`, cursor.DailyProblems, cursor.TotalProblems, cursor.Username)
+		if err := row.Scan(&startingRank); err != nil {
+			return c.JSON(http.StatusInternalServerError, fmt.Sprintf("failed to retrieve starting rank: %v", err))
+		}
+	}
+	// ensure deterministic ordering for leaderboard pagination and add limit
+	baseQuery += `
+		ORDER BY daily_problems DESC, total_problems DESC, username ASC
+		LIMIT 11
+	`
+	// query the database with the constructed query and args
+	rows, err := db.Query(baseQuery, args...)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, fmt.Sprintf("failed to retrieve leaderboard: %v", err))
 	}
 	defer rows.Close()
 	// Store all of the users for the leaderboardData
-	var leaderboardData []map[string]interface{}
+	var leaderboardData []LeaderboardEntry
+	var firstItem *LeaderboardEntry
 	// Process of the rows from the query and repopulate the response
 	for rows.Next() {
 		var username string
@@ -483,17 +555,105 @@ func getLeaderboard(c echo.Context) error {
 		if err != nil {
 			return c.JSON(http.StatusInternalServerError, fmt.Sprintf("Failed to parse leaderboard data: %v", err))
 		}
-		leaderboardData = append(leaderboardData, map[string]interface{}{
-			"username":       username,
-			"daily_problems": dailyProblems,
-			"total_problems": totalProblems,
-			"creation_date":  creationDate,
-		})
+		entry := LeaderboardEntry{
+			Username:      username,
+			DailyProblems: dailyProblems,
+			TotalProblems: totalProblems,
+			CreationDate:  creationDate,
+		}
+		if firstItem == nil {
+			firstItem = &entry
+		}
+		leaderboardData = append(leaderboardData, entry)
 	}
 	if err = rows.Err(); err != nil {
 		return c.JSON(http.StatusInternalServerError, fmt.Sprintf("Error occurred when processing leaderboard rows: %v", err))
 	}
-	return c.JSON(http.StatusOK, leaderboardData)
+	// check if there is another page (11 entries found)
+	hasNextPage := len(leaderboardData) == 11
+	// trim to 10 entries after storing next page flag
+	if hasNextPage {
+		leaderboardData = leaderboardData[:10]
+	}
+	// get previous cursor
+	var prevCursor *string
+	if cursorStr != "" {
+		prevQuery := `
+			SELECT username, daily_problems, total_problems, creation_date
+			FROM users
+			WHERE
+				(daily_problems > $1) OR
+				(daily_problems = $1 AND total_problems > $2) OR
+				(daily_problems = $1 AND total_problems = $2 AND username < $3)
+			ORDER BY daily_problems ASC, total_problems ASC, username DESC
+			LIMIT 11
+		`
+		rows, err := db.Query(prevQuery, firstItem.DailyProblems, firstItem.TotalProblems, firstItem.Username)
+		if err != nil {
+			return c.JSON(http.StatusInternalServerError, fmt.Sprintf("Failed to query previous cursor data: %v", err))
+		}
+		defer rows.Close()
+		var prevPage []LeaderboardEntry
+		for rows.Next() {
+			var username string
+			var dailyProblems int
+			var totalProblems int
+			var creationDate string
+			// process row data
+			err := rows.Scan(&username, &dailyProblems, &totalProblems, &creationDate)
+			if err != nil {
+				return c.JSON(http.StatusInternalServerError, fmt.Sprintf("Failed to parse previous cursor data: %v", err))
+			}
+			prevPage = append(prevPage, LeaderboardEntry{
+				Username:      username,
+				DailyProblems: dailyProblems,
+				TotalProblems: totalProblems,
+				CreationDate:  creationDate,
+			})
+		}
+		if len(prevPage) == 11 {
+			first := prevPage[len(prevPage)-1] // prevPage[10]
+			encoded, err := encodeCursor(LeaderboardCursor{
+				DailyProblems: first.DailyProblems,
+				TotalProblems: first.TotalProblems,
+				Username:      first.Username,
+			})
+			if err != nil {
+				return c.JSON(http.StatusInternalServerError, fmt.Sprintf("Failed to encode previous cursor: %v", err))
+			}
+			prevCursor = &encoded
+		} else if len(prevPage) > 0 {
+			// we have less than a full page, so we are on the first page
+			// use a special "start" cursor value to indicate this (necesssary to differentiate from null)
+			startStr := "start"
+			prevCursor = &startStr
+		}
+	}
+	if hasNextPage {
+		last := leaderboardData[len(leaderboardData)-1]
+		nextCursor, err := encodeCursor(LeaderboardCursor{
+			DailyProblems: last.DailyProblems,
+			TotalProblems: last.TotalProblems,
+			Username:      last.Username,
+		})
+		if err != nil {
+			return c.JSON(http.StatusInternalServerError, fmt.Sprintf("Failed to encode next cursor: %v", err))
+		}
+		return c.JSON(http.StatusOK, map[string]interface{}{
+			"starting_rank": startingRank,
+			"data":          leaderboardData,
+			"prev_cursor":   prevCursor,
+			"next_cursor":   nextCursor,
+		})
+	} else {
+		// leaderboard has no additional pages
+		return c.JSON(http.StatusOK, map[string]interface{}{
+			"starting_rank": startingRank,
+			"data":          leaderboardData,
+			"prev_cursor":   prevCursor,
+			"next_cursor":   nil,
+		})
+	}
 }
 
 // Function for creating user entry in users table
@@ -524,25 +684,19 @@ func createUser(c echo.Context) error {
 
 // Function for retrieving the start date
 func getStartDate(c echo.Context) error {
-	rows, err := db.Query(`
-		SELECT date_used
+	rows := db.QueryRow(`
+		SELECT MIN(date_used)
 		FROM problems
-		ORDER BY date_used ASC
-		LIMIT 1
 	`)
-	if err != nil {
-		return c.JSON(http.StatusInternalServerError, fmt.Sprintf("failed to get start date: %v", err))
-	}
-	defer rows.Close()
-	// Check if at least one row is returned
-	if !rows.Next() {
-		return c.JSON(http.StatusNoContent, "no start date found for %s")
-	}
 	var problemData struct {
 		StartDate string `json:"date_used"`
 	}
 	// Retrieve data from the first row
 	if err := rows.Scan(&problemData.StartDate); err != nil {
+		// Check if at least one row is returned
+		if err == sql.ErrNoRows {
+			return c.JSON(http.StatusNoContent, "no start date found")
+		}
 		return c.JSON(http.StatusInternalServerError, fmt.Sprintf("failed to scan start date from database: %v", err))
 	}
 	return c.JSON(http.StatusOK, problemData.StartDate)

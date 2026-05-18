@@ -20,11 +20,15 @@
         </div>
       </div>
     </div>
-    <h3 v-if="user"
-      class="text-white text-center font-semibold text-3xl md:text-4xl lg:text-5xl tracking-wide mt-4 lg:mt-[-.25em]">
-      {{
-        username }}'s
-      Profile</h3>
+    <div v-if="user" class="flex justify-center items-center gap-4 mt-4 lg:mt-[-.25em]">
+      <h3 class="text-white font-semibold text-3xl md:text-4xl lg:text-5xl tracking-wide">
+        {{ username }}'s Profile{{ rankStr }}
+      </h3>
+      <span
+        class="border-2 border-blue-400 text-blue-400 rounded-full px-4 py-1 text-lg md:text-xl lg:text-2xl font-medium tracking-normal">
+        #{{ rank }}
+      </span>
+    </div>
     <div class="flex flex-col gap-y-24 justify-center align-items mt-[10em]" v-else>
       <h3 class="text-white text-center font-semibold text-5xl md:text-7xl tracking-wide mt-[-.25em]">No user data
         found!</h3>
@@ -64,7 +68,7 @@
             <span class="font-semibold text-2xl md:text-4xl lg:text-5xl text-center text-blue-300">Total Problems
               Solved</span>
             <span class="text-left font-light text-5xl lg-text-6xl font-serif font-serif">{{ user.total_problems
-              }}</span>
+            }}</span>
           </div>
           <div class="flex flex-col gap-y-4 w-1/2 justify-center items-center py-4">
             <span class="font-semibold text-2xl md:text-4xl lg:text-5xl text-center text-blue-300">Longest Streak</span>
@@ -152,6 +156,7 @@ export default {
     const { user } = useAuth0();
     const route = useRoute();
     const username = ref('');
+    const rank = ref('');
     const searchUsername = ref('');
     const userData = ref(null);
     const endDate = ref(null);
@@ -179,7 +184,9 @@ export default {
         return;
       }
       // Process all user data from the database
-      // First process the solves (determine the streaks)
+      // First retrieve the rank
+      rank.value = userData.value.rank;
+      // Next process the solves (determine the streaks)
       const solves = userData.value.solves ?? {};
       const keys = Object.keys(solves).map(date => convertDateToUTC(new Date(date))).sort((a, b) => a - b);
       // Store the problem solves data
@@ -269,7 +276,7 @@ export default {
         }
       }
     );
-    return { username, router, searchUsername, user: userData, isLoading, endDate, searchProfile };
+    return { username, rank, router, searchUsername, user: userData, isLoading, endDate, searchProfile };
   },
   components: {
     CalendarHeatmap, LoadingCogs
