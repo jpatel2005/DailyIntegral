@@ -328,7 +328,7 @@ func verifySolution(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, fmt.Sprintf("Invalid answer provided. Cannot provide empty string or \\int: %s or use comparison operators", answer))
 	}
 	rows, err := db.Query(`
-		SELECT answer
+		SELECT problem, answer
 		FROM problems
 		WHERE date_used = $1
 	`, dateStr)
@@ -342,10 +342,11 @@ func verifySolution(c echo.Context) error {
 	}
 	// create struct to hold the problem data
 	var problemData struct {
-		Answer string `json:"answer"`
+		Problem string `json:"problem"`
+		Answer  string `json:"answer"`
 	}
 	// Retrieve data from the first row
-	if err := rows.Scan(&problemData.Answer); err != nil {
+	if err := rows.Scan(&problemData.Problem, &problemData.Answer); err != nil {
 		return c.JSON(http.StatusInternalServerError, fmt.Sprintf("failed to scan data from database for %s: %v", dateStr, err))
 	}
 	// Check if there is more than one row (this shouldn't happen)
@@ -356,6 +357,7 @@ func verifySolution(c echo.Context) error {
 	queryParams := url.Values{}
 	queryParams.Add("eq1", answer)
 	queryParams.Add("eq2", problemData.Answer)
+	queryParams.Add("problem", problemData.Problem)
 	// Build full URL with query parameters
 	fullURL := fmt.Sprintf("%s?%s", WOLFRAM_URL, queryParams.Encode())
 	resp, err := http.Get(fullURL)
