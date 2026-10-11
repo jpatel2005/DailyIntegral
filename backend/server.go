@@ -366,6 +366,9 @@ func verifySolution(c echo.Context) error {
 	}
 	// Parse the body of the response
 	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return c.JSON(http.StatusBadGateway, fmt.Sprintf("Verifier returned %s", resp.Status))
+	}
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, fmt.Sprintf("Error parsing response body from verifier: %v", err))
