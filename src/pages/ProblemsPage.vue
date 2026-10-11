@@ -264,7 +264,7 @@ export default {
           return false;
         }
         if (!response.ok) {
-          manageAnswerStatus(false);
+          manageAnswerStatus(false, 'Unable to verify right now. Please try again.');
           return false;
         }
         const data = await response.json();
@@ -272,7 +272,7 @@ export default {
         manageAnswerStatus(status);
         return status;
       } catch {
-        manageAnswerStatus(false);
+        manageAnswerStatus(false, 'Unable to verify right now. Please try again.');
         return false;
       }
     }
